@@ -77,6 +77,24 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_attendance_composite ON attendance(student_id, date, session)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(date)")
     
+    # Clean up orphaned embeddings (where student_id does not exist in students table)
+    cursor.execute("""
+    DELETE FROM face_embeddings 
+    WHERE student_id NOT IN (SELECT student_id FROM students)
+    """)
+    
+    # Clean up orphaned attendance logs
+    cursor.execute("""
+    DELETE FROM attendance 
+    WHERE student_id NOT IN (SELECT student_id FROM students)
+    """)
+    
+    # Clean up orphaned recognition logs
+    cursor.execute("""
+    DELETE FROM recognition_logs 
+    WHERE student_id NOT IN (SELECT student_id FROM students) AND student_id != 'Unknown'
+    """)
+    
     conn.commit()
     conn.close()
 
@@ -97,12 +115,12 @@ def register_student(student_id, name, roll_number, section, department, email):
         conn.close()
 
 def delete_student(student_id):
-    """Deletes a student and their face embeddings, attendance records from SQLite."""
+    """Deletes a student and explicitly clears their face embeddings and attendance records from SQLite."""
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        # Enable Foreign Keys to trigger Cascade deletes
-        cursor.execute("PRAGMA foreign_keys = ON")
+        cursor.execute("DELETE FROM face_embeddings WHERE student_id = ?", (student_id,))
+        cursor.execute("DELETE FROM attendance WHERE student_id = ?", (student_id,))
         cursor.execute("DELETE FROM students WHERE student_id = ?", (student_id,))
         conn.commit()
         return cursor.rowcount > 0

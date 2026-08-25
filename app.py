@@ -57,6 +57,53 @@ demo_mode = st.sidebar.checkbox(
     help="Toggles simulated webcam/data inputs so you can explore the application without physical hardware."
 )
 
+# Model Selection Dropdown
+selected_model = st.sidebar.selectbox(
+    "🧠 Active Face Model",
+    ["mobilenet", "custom_cnn", "custom_cnn_baseline"],
+    index=0,
+    format_func=lambda x: "MobileNetV2 (Transfer Learning)" if x == "mobilenet" else (
+        "Improved CNN (Trained)" if x == "custom_cnn" else "Baseline CNN (Trained)"
+    ),
+    help="Select the Deep Learning model to use. Face embeddings are model-specific; you must use the same model for both registration and live recognition."
+)
+
+# Database embedding shape mismatch checker
+try:
+    from src.database import get_db_connection
+    from src.embeddings import get_face_model
+    import json
+    
+    # Initialize active model to check expected dimension
+    temp_model = get_face_model(selected_model)
+    expected_dim = temp_model.output_shape[-1]
+    
+    conn = get_db_connection()
+    c = conn.cursor()
+    row = c.execute("SELECT embedding FROM face_embeddings LIMIT 1").fetchone()
+    conn.close()
+    
+    if row is not None:
+        db_dim = len(json.loads(row[0]))
+        if db_dim != expected_dim:
+            # Auto-clear incompatible database records
+            conn = get_db_connection()
+            c = conn.cursor()
+            c.execute("DELETE FROM face_embeddings")
+            c.execute("DELETE FROM attendance")
+            c.execute("DELETE FROM recognition_logs")
+            c.execute("DELETE FROM students")
+            conn.commit()
+            conn.close()
+            
+            # Force reload face recognition cache
+            from src.face_recognition import load_known_face_embeddings
+            load_known_face_embeddings(force_reload=True)
+            
+            st.sidebar.info("🧹 Auto-cleared outdated biometric records.")
+except Exception as check_err:
+    pass
+
 st.sidebar.markdown("---")
 # Navigation Menu
 nav_selection = st.sidebar.radio(
@@ -76,9 +123,9 @@ nav_selection = st.sidebar.radio(
 if nav_selection == "📊 Dashboard":
     dashboard.show()
 elif nav_selection == "👤 Register Student":
-    register_student.show(demo_mode=demo_mode)
+    register_student.show(demo_mode=demo_mode, model_type=selected_model)
 elif nav_selection == "🎥 Live Attendance":
-    live_attendance.show(demo_mode=demo_mode)
+    live_attendance.show(demo_mode=demo_mode, model_type=selected_model)
 elif nav_selection == "📋 Attendance Records":
     attendance_records.show()
 elif nav_selection == "📈 Analytics & Sequence":

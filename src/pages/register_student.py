@@ -14,7 +14,7 @@ from src.face_detection import detect_faces, crop_face
 from src.preprocessing import check_face_quality, resize_image, normalize_image
 from src.embeddings import get_face_model, get_embedding
 
-def show(demo_mode=False):
+def show(demo_mode=False, model_type="custom_cnn"):
     st.title("👤 Register Student")
     st.markdown("### Register a new student and enroll their biometrics")
     
@@ -100,9 +100,10 @@ def show(demo_mode=False):
                         cropped = crop_face(img_bgr, (x, y, w, h))
                         cv2.imwrite(sample_path, cropped)
                         
-                        # 1. Register student in SQLite if first sample
+                        # 1. Register student in SQLite if not already registered in DB
                         is_registered = False
-                        if existing_samples == 0:
+                        existing_student_db = get_student(student_id)
+                        if not existing_student_db:
                             success = register_student(
                                 student_id=student_id,
                                 name=name,
@@ -115,14 +116,14 @@ def show(demo_mode=False):
                                 is_registered = True
                                 st.write("🎉 Student registered in database.")
                             else:
-                                st.error("❌ Database insertion failed.")
+                                st.error("❌ Database insertion failed. Roll number or Student ID may already exist.")
                                 return
                         else:
                             is_registered = True
                             
                         if is_registered:
                             # 2. Extract Embedding and save in database
-                            model = get_face_model("mobilenet")
+                            model = get_face_model(model_type)
                             preprocessed = normalize_image(resize_image(cropped, IMAGE_SIZE))
                             emb = get_embedding(model, preprocessed)
                             save_embedding(student_id, emb)
@@ -153,7 +154,7 @@ def show(demo_mode=False):
                 if success:
                     os.makedirs(student_dir, exist_ok=True)
                     # Create mock embedding
-                    model = get_face_model("mobilenet")
+                    model = get_face_model(model_type)
                     mock_face = np.random.uniform(0, 255, (IMAGE_SIZE[0], IMAGE_SIZE[1], 3)).astype(np.uint8)
                     cv2.imwrite(os.path.join(student_dir, "sample_1.png"), mock_face)
                     preprocessed = normalize_image(mock_face)
@@ -197,7 +198,7 @@ def show(demo_mode=False):
                     return
                     
                 captured_count = 0
-                model = get_face_model("mobilenet")
+                model = get_face_model(model_type)
                 
                 while captured_count < 15:
                     ret, frame = cap.read()

@@ -61,6 +61,8 @@ def build_mobilenet_extractor(input_shape=(160, 160, 3), embedding_dim=128):
     """
     Builds a Transfer Learning model using MobileNetV2 pre-trained on ImageNet (Course 4).
     The base layers are frozen, acting as a feature extractor.
+    We extract the pooling layer features directly and L2 normalize them to enable
+    high-accuracy zero-shot face comparison out-of-the-box.
     """
     base_model = tf.keras.applications.MobileNetV2(
         input_shape=input_shape,
@@ -74,11 +76,8 @@ def build_mobilenet_extractor(input_shape=(160, 160, 3), embedding_dim=128):
     # Ensure inference mode is active for BatchNormalization layers in MobileNetV2
     x = base_model(inputs, training=False)
     x = layers.GlobalAveragePooling2D()(x)
-    x = layers.Dense(256, activation='relu')(x)
-    x = layers.Dropout(0.3)(x)
-    outputs = layers.Dense(embedding_dim)(x)
     # L2 normalization layer
-    normalized_outputs = layers.Lambda(lambda x: tf.math.l2_normalize(x, axis=1))(outputs)
+    normalized_outputs = layers.Lambda(lambda x: tf.math.l2_normalize(x, axis=1))(x)
     
     model = models.Model(inputs, normalized_outputs)
     return model
@@ -147,5 +146,7 @@ def compute_similarity(embedding1, embedding2):
     Since embeddings are already L2 normalized, cosine similarity is just the dot product!
     """
     if embedding1 is None or embedding2 is None:
+        return 0.0
+    if len(embedding1) != len(embedding2):
         return 0.0
     return float(np.dot(embedding1, embedding2))
