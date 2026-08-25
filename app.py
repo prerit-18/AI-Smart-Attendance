@@ -13,13 +13,22 @@ st.set_page_config(
 # Add base directory to path so imports work correctly
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from src.database import init_db
-import src.pages.dashboard as dashboard
-import src.pages.register_student as register_student
-import src.pages.live_attendance as live_attendance
-import src.pages.attendance_records as attendance_records
-import src.pages.analytics as analytics
-import src.pages.model_evaluation as model_evaluation
+import traceback
+
+try:
+    from src.database import init_db
+    import src.pages.dashboard as dashboard
+    import src.pages.register_student as register_student
+    import src.pages.live_attendance as live_attendance
+    import src.pages.attendance_records as attendance_records
+    import src.pages.analytics as analytics
+    import src.pages.model_evaluation as model_evaluation
+except Exception as e:
+    st.error("### ❌ App Initialization Error")
+    st.markdown("An error occurred while importing application components. The full traceback is shown below:")
+    st.code(traceback.format_exc())
+    st.stop()
+
 
 # 1. Initialize Database on app start
 init_db()
