@@ -27,6 +27,18 @@ except Exception as e:
     st.error("### ❌ App Initialization Error")
     st.markdown("An error occurred while importing application components. The full traceback is shown below:")
     st.code(traceback.format_exc())
+    
+    # Run diagnostics on the imported cv2 module
+    try:
+        import cv2
+        st.markdown("---")
+        st.subheader("🔍 OpenCV (cv2) Debug Diagnostics")
+        st.write(f"**Loaded from path:** `{getattr(cv2, '__file__', 'None')}`")
+        st.write(f"**Package folder (`__path__`):** `{getattr(cv2, '__path__', 'None')}`")
+        st.write(f"**Attributes:**")
+        st.code(str(dir(cv2)))
+    except Exception as cv2_err:
+        st.error(f"Failed to import cv2: {cv2_err}")
     st.stop()
 
 
