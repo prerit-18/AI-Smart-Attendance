@@ -112,8 +112,3 @@ Biometric datasets require careful data management. This project applies privacy
 - **Prototype Warning**: This system is designed as an academic demonstration and should not be deployed in institutional or commercial environments without formal consent and a Biometric Impact Assessment.
 
 ---
-
-## 👨‍💻 Author
-- **Academic Capstone Project**
-- Developed as part of B.Tech CSE-AIML Industrial Training.
-# AI-Smart-Attendance
