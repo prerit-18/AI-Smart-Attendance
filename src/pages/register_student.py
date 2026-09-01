@@ -126,11 +126,11 @@ def show(demo_mode=False, model_type="custom_cnn"):
                             model = get_face_model(model_type)
                             preprocessed = normalize_image(resize_image(cropped, IMAGE_SIZE))
                             emb = get_embedding(model, preprocessed)
-                            save_embedding(student_id, emb)
+                            save_embedding(student_id, emb, model_name=model_type)
                             
                             # Force reload face recognition cache
                             from src.face_recognition import load_known_face_embeddings
-                            load_known_face_embeddings(force_reload=True)
+                            load_known_face_embeddings(model_type=model_type, force_reload=True)
                             
                             st.success(f"💾 Saved sample {existing_samples+1}. Enrollment embedding written to database.")
                             st.info(f"You have registered {existing_samples+1} sample(s) for this student. We recommend capturing 5-10 samples in different angles for high accuracy.")
@@ -159,10 +159,10 @@ def show(demo_mode=False, model_type="custom_cnn"):
                     cv2.imwrite(os.path.join(student_dir, "sample_1.png"), mock_face)
                     preprocessed = normalize_image(mock_face)
                     emb = get_embedding(model, preprocessed)
-                    save_embedding(student_id, emb)
+                    save_embedding(student_id, emb, model_name=model_type)
                     
                     from src.face_recognition import load_known_face_embeddings
-                    load_known_face_embeddings(force_reload=True)
+                    load_known_face_embeddings(model_type=model_type, force_reload=True)
                     
                     st.success(f"🎉 [DEMO] Successfully registered student {name} with simulated biometric signatures.")
                 else:
@@ -226,7 +226,7 @@ def show(demo_mode=False, model_type="custom_cnn"):
                             # Save embedding
                             preprocessed = normalize_image(resize_image(cropped, IMAGE_SIZE))
                             emb = get_embedding(model, preprocessed)
-                            save_embedding(student_id, emb)
+                            save_embedding(student_id, emb, model_name=model_type)
                             
                             # Update progress
                             progress_bar.progress(captured_count / 15)
@@ -246,6 +246,6 @@ def show(demo_mode=False, model_type="custom_cnn"):
                 
                 # Reload face recognition cache
                 from src.face_recognition import load_known_face_embeddings
-                load_known_face_embeddings(force_reload=True)
+                load_known_face_embeddings(model_type=model_type, force_reload=True)
                 
                 st.success(f"🎉 Registration and Enrollment complete! Captured 15 biometric samples for student: **{name}**.")

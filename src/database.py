@@ -40,10 +40,20 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         student_id TEXT NOT NULL,
         embedding TEXT NOT NULL,  -- JSON string of list
+        model_name TEXT DEFAULT 'mobilenet',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE
     )
     """)
+    
+    # Check if model_name column exists in face_embeddings (migration for existing db)
+    try:
+        cursor.execute("PRAGMA table_info(face_embeddings)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if "model_name" not in columns:
+            cursor.execute("ALTER TABLE face_embeddings ADD COLUMN model_name TEXT DEFAULT 'mobilenet'")
+    except Exception:
+        pass
     
     # 3. Attendance Table
     cursor.execute("""
@@ -76,24 +86,6 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_embeddings_student_id ON face_embeddings(student_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_attendance_composite ON attendance(student_id, date, session)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(date)")
-    
-    # Clean up orphaned embeddings (where student_id does not exist in students table)
-    cursor.execute("""
-    DELETE FROM face_embeddings 
-    WHERE student_id NOT IN (SELECT student_id FROM students)
-    """)
-    
-    # Clean up orphaned attendance logs
-    cursor.execute("""
-    DELETE FROM attendance 
-    WHERE student_id NOT IN (SELECT student_id FROM students)
-    """)
-    
-    # Clean up orphaned recognition logs
-    cursor.execute("""
-    DELETE FROM recognition_logs 
-    WHERE student_id NOT IN (SELECT student_id FROM students) AND student_id != 'Unknown'
-    """)
     
     conn.commit()
     conn.close()
@@ -136,6 +128,41 @@ def get_student(student_id):
     conn.close()
     return dict(row) if row else None
 
+def update_student(student_id, name, roll_number, section, department, email):
+    """Updates details of an existing student. Returns (success: bool, message: str)."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+        UPDATE students
+        SET name = ?, roll_number = ?, section = ?, department = ?, email = ?
+        WHERE student_id = ?
+        """, (name, roll_number, section, department, email, student_id))
+        conn.commit()
+        if cursor.rowcount > 0:
+            return True, "Student details updated successfully."
+        return False, f"Student ID '{student_id}' not found."
+    except sqlite3.IntegrityError:
+        return False, f"Roll number '{roll_number}' is already assigned to another student."
+    except Exception as e:
+        return False, str(e)
+    finally:
+        conn.close()
+
+def delete_student_embeddings(student_id, model_name=None):
+    """Deletes face embeddings for a student (optionally for a specific model)."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        if model_name:
+            cursor.execute("DELETE FROM face_embeddings WHERE student_id = ? AND model_name = ?", (student_id, model_name))
+        else:
+            cursor.execute("DELETE FROM face_embeddings WHERE student_id = ?", (student_id,))
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        conn.close()
+
 def get_all_students():
     """Retrieves all registered students."""
     conn = get_db_connection()
@@ -145,24 +172,34 @@ def get_all_students():
     conn.close()
     return [dict(row) for row in rows]
 
-def save_embedding(student_id, embedding_vector):
-    """Saves a 1D numpy face embedding array as a serialized JSON list."""
+def save_embedding(student_id, embedding_vector, model_name="mobilenet"):
+    """Saves a 1D numpy face embedding array as a serialized JSON list with associated model_name."""
     conn = get_db_connection()
     cursor = conn.cursor()
     # Serialize embedding list to JSON
     embedding_str = json.dumps(embedding_vector.tolist())
-    cursor.execute("""
-    INSERT INTO face_embeddings (student_id, embedding)
-    VALUES (?, ?)
-    """, (student_id, embedding_str))
+    try:
+        cursor.execute("""
+        INSERT INTO face_embeddings (student_id, embedding, model_name)
+        VALUES (?, ?, ?)
+        """, (student_id, embedding_str, model_name))
+    except sqlite3.OperationalError:
+        # Fallback if model_name column does not exist yet
+        cursor.execute("""
+        INSERT INTO face_embeddings (student_id, embedding)
+        VALUES (?, ?)
+        """, (student_id, embedding_str))
     conn.commit()
     conn.close()
 
-def get_student_embeddings(student_id):
-    """Retrieves all embeddings for a specific student."""
+def get_student_embeddings(student_id, model_name=None):
+    """Retrieves all embeddings for a specific student, optionally filtered by model."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT embedding FROM face_embeddings WHERE student_id = ?", (student_id,))
+    if model_name:
+        cursor.execute("SELECT embedding FROM face_embeddings WHERE student_id = ? AND model_name = ?", (student_id, model_name))
+    else:
+        cursor.execute("SELECT embedding FROM face_embeddings WHERE student_id = ?", (student_id,))
     rows = cursor.fetchall()
     conn.close()
     
@@ -171,11 +208,17 @@ def get_student_embeddings(student_id):
         embeddings.append(np.array(json.loads(row['embedding']), dtype=np.float32))
     return embeddings
 
-def get_all_embeddings():
-    """Retrieves all stored face embeddings and maps them to student IDs."""
+def get_all_embeddings(model_name=None, expected_dim=None):
+    """Retrieves all stored face embeddings and maps them to student IDs, optionally filtered by model_name and dimension."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT student_id, embedding FROM face_embeddings")
+    try:
+        if model_name:
+            cursor.execute("SELECT student_id, embedding FROM face_embeddings WHERE model_name = ?", (model_name,))
+        else:
+            cursor.execute("SELECT student_id, embedding FROM face_embeddings")
+    except sqlite3.OperationalError:
+        cursor.execute("SELECT student_id, embedding FROM face_embeddings")
     rows = cursor.fetchall()
     conn.close()
     
@@ -183,6 +226,8 @@ def get_all_embeddings():
     for row in rows:
         sid = row['student_id']
         emb = np.array(json.loads(row['embedding']), dtype=np.float32)
+        if expected_dim is not None and len(emb) != expected_dim:
+            continue
         if sid not in embeddings_dict:
             embeddings_dict[sid] = []
         embeddings_dict[sid].append(emb)

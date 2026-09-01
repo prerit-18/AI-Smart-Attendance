@@ -19,6 +19,7 @@ try:
     from src.database import init_db
     import src.pages.dashboard as dashboard
     import src.pages.register_student as register_student
+    import src.pages.student_database as student_database
     import src.pages.live_attendance as live_attendance
     import src.pages.attendance_records as attendance_records
     import src.pages.analytics as analytics
@@ -68,40 +69,13 @@ selected_model = st.sidebar.selectbox(
     help="Select the Deep Learning model to use. Face embeddings are model-specific; you must use the same model for both registration and live recognition."
 )
 
-# Database embedding shape mismatch checker
+# Synchronize biometric embeddings for active model if needed (safe, non-destructive)
 try:
-    from src.database import get_db_connection
-    from src.embeddings import get_face_model
-    import json
-    
-    # Initialize active model to check expected dimension
-    temp_model = get_face_model(selected_model)
-    expected_dim = temp_model.output_shape[-1]
-    
-    conn = get_db_connection()
-    c = conn.cursor()
-    row = c.execute("SELECT embedding FROM face_embeddings LIMIT 1").fetchone()
-    conn.close()
-    
-    if row is not None:
-        db_dim = len(json.loads(row[0]))
-        if db_dim != expected_dim:
-            # Auto-clear incompatible database records
-            conn = get_db_connection()
-            c = conn.cursor()
-            c.execute("DELETE FROM face_embeddings")
-            c.execute("DELETE FROM attendance")
-            c.execute("DELETE FROM recognition_logs")
-            c.execute("DELETE FROM students")
-            conn.commit()
-            conn.close()
-            
-            # Force reload face recognition cache
-            from src.face_recognition import load_known_face_embeddings
-            load_known_face_embeddings(force_reload=True)
-            
-            st.sidebar.info("🧹 Auto-cleared outdated biometric records.")
-except Exception as check_err:
+    from src.embeddings import sync_student_embeddings
+    sync_student_embeddings(selected_model)
+    from src.face_recognition import load_known_face_embeddings
+    load_known_face_embeddings(model_type=selected_model, force_reload=True)
+except Exception as sync_err:
     pass
 
 st.sidebar.markdown("---")
@@ -111,6 +85,7 @@ nav_selection = st.sidebar.radio(
     [
         "📊 Dashboard",
         "👤 Register Student",
+        "👥 Student Database",
         "🎥 Live Attendance",
         "📋 Attendance Records",
         "📈 Analytics & Sequence",
@@ -124,6 +99,8 @@ if nav_selection == "📊 Dashboard":
     dashboard.show()
 elif nav_selection == "👤 Register Student":
     register_student.show(demo_mode=demo_mode, model_type=selected_model)
+elif nav_selection == "👥 Student Database":
+    student_database.show(demo_mode=demo_mode, model_type=selected_model)
 elif nav_selection == "🎥 Live Attendance":
     live_attendance.show(demo_mode=demo_mode, model_type=selected_model)
 elif nav_selection == "📋 Attendance Records":

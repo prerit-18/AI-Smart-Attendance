@@ -53,8 +53,13 @@ def build_custom_cnn(input_shape=(160, 160, 3), embedding_dim=128, use_regulariz
     model.add(layers.Dense(embedding_dim))
     
     # L2 normalize embeddings so cosine similarity can be calculated via simple dot product
-    model.add(layers.Lambda(lambda x: tf.math.l2_normalize(x, axis=1)))
+    model.add(layers.UnitNormalization(axis=-1))
     
+    try:
+        model.build((None, *input_shape))
+    except Exception:
+        pass
+        
     return model
 
 def build_mobilenet_extractor(input_shape=(160, 160, 3), embedding_dim=128):
@@ -77,10 +82,14 @@ def build_mobilenet_extractor(input_shape=(160, 160, 3), embedding_dim=128):
     x = base_model(inputs, training=False)
     x = layers.GlobalAveragePooling2D()(x)
     # L2 normalization layer
-    normalized_outputs = layers.Lambda(lambda x: tf.math.l2_normalize(x, axis=1))(x)
+    normalized_outputs = layers.UnitNormalization(axis=-1)(x)
     
     model = models.Model(inputs, normalized_outputs)
     return model
+
+def _l2_norm(x):
+    import tensorflow as _tf
+    return _tf.math.l2_normalize(x, axis=1)
 
 def get_face_model(model_type="mobilenet", force_reload=False):
     """
@@ -98,8 +107,14 @@ def get_face_model(model_type="mobilenet", force_reload=False):
     # Try to load custom trained weights if they exist, otherwise initialize from backbone
     if os.path.exists(model_path):
         try:
-            # Custom lambda layers may require custom_objects, or we load as saved model
-            model = models.load_model(model_path, compile=False)
+            custom_objs = {'<lambda>': _l2_norm, '_l2_norm': _l2_norm}
+            try:
+                model = models.load_model(model_path, compile=False, safe_mode=False, custom_objects=custom_objs)
+            except TypeError:
+                model = models.load_model(model_path, compile=False, custom_objects=custom_objs)
+            # Test forward pass to ensure lambda/layers are functional
+            dummy = np.zeros((1, IMAGE_SIZE[0], IMAGE_SIZE[1], 3), dtype=np.float32)
+            _ = model(dummy, training=False)
             _MODEL_CACHE[cache_key] = model
             return model
         except Exception as e:
@@ -150,3 +165,43 @@ def compute_similarity(embedding1, embedding2):
     if len(embedding1) != len(embedding2):
         return 0.0
     return float(np.dot(embedding1, embedding2))
+
+def sync_student_embeddings(model_type="mobilenet"):
+    """
+    Ensures all registered students have face embeddings computed and saved for the active model_type.
+    Reads student face crops from data/students/<student_id> and computes embeddings using the active model.
+    Never deletes any data!
+    """
+    import cv2
+    from config.config import STUDENTS_DIR, IMAGE_SIZE
+    from src.database import get_all_students, get_student_embeddings, save_embedding
+    from src.preprocessing import resize_image, normalize_image
+    
+    students = get_all_students()
+    if not students:
+        return
+        
+    model = get_face_model(model_type)
+    try:
+        expected_dim = model.output_shape[-1]
+    except Exception:
+        dummy = np.zeros((1, IMAGE_SIZE[0], IMAGE_SIZE[1], 3), dtype=np.float32)
+        expected_dim = model(dummy, training=False).shape[-1]
+    
+    for s in students:
+        sid = s["student_id"]
+        # Check if student already has embeddings for this specific model
+        existing = get_student_embeddings(sid, model_name=model_type)
+        if not existing:
+            s_dir = os.path.join(STUDENTS_DIR, sid)
+            if os.path.exists(s_dir):
+                sample_files = [f for f in sorted(os.listdir(s_dir)) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+                for f in sample_files:
+                    img_path = os.path.join(s_dir, f)
+                    img = cv2.imread(img_path)
+                    if img is not None:
+                        preprocessed = normalize_image(resize_image(img, IMAGE_SIZE))
+                        emb = get_embedding(model, preprocessed)
+                        if emb is not None:
+                            save_embedding(sid, emb, model_name=model_type)
+

@@ -20,8 +20,8 @@ def show(demo_mode=False, model_type="custom_cnn"):
     st.title("🎥 Live Attendance Session")
     st.markdown("### Deep Learning Real-Time Face Recognition & Auto Attendance")
     
-    # Reload known face embeddings cache
-    load_known_face_embeddings(force_reload=True)
+    # Reload known face embeddings cache for the active model
+    load_known_face_embeddings(model_type=model_type, force_reload=True)
     
     # Configure session parameters
     session_name = st.sidebar.text_input("Current Session Name", value="Default Class").strip()
@@ -90,7 +90,7 @@ def show(demo_mode=False, model_type="custom_cnn"):
                     emb = get_embedding(model, preprocessed)
                     
                     # Run face recognition model
-                    student_id, confidence, is_known = recognize_face(emb, threshold=rec_threshold)
+                    student_id, confidence, is_known = recognize_face(emb, threshold=rec_threshold, model_type=model_type)
                     
                     if is_known:
                         student_info = get_student(student_id)
@@ -158,7 +158,7 @@ def show(demo_mode=False, model_type="custom_cnn"):
                                 emb = get_embedding(model, preprocessed)
                                 
                                 # Recognize face
-                                student_id, confidence, is_known = recognize_face(emb, threshold=rec_threshold)
+                                student_id, confidence, is_known = recognize_face(emb, threshold=rec_threshold, model_type=model_type)
                                 
                                 if is_known:
                                     # Mark attendance

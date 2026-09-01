@@ -8,19 +8,24 @@ from config.config import RECOGNITION_THRESHOLD
 from src.database import get_all_embeddings
 from src.embeddings import compute_similarity
 
-# Global dictionary to cache student embeddings: {student_id: [embedding_vector, ...]}
+# Global dictionary to cache student embeddings: {(model_type, expected_dim): {student_id: [embedding_vector, ...]}}
 _KNOWN_FACE_EMBEDDINGS = {}
 
-def load_known_face_embeddings(force_reload=False):
+def load_known_face_embeddings(model_type=None, expected_dim=None, force_reload=False):
     """
-    Loads all student embeddings from the SQLite database and caches them.
+    Loads student embeddings from SQLite, filtered by model and/or dimension, and caches them.
     """
     global _KNOWN_FACE_EMBEDDINGS
-    if not _KNOWN_FACE_EMBEDDINGS or force_reload:
-        _KNOWN_FACE_EMBEDDINGS = get_all_embeddings()
-    return _KNOWN_FACE_EMBEDDINGS
+    cache_key = (model_type, expected_dim)
+    if force_reload or cache_key not in _KNOWN_FACE_EMBEDDINGS:
+        embs = get_all_embeddings(model_name=model_type, expected_dim=expected_dim)
+        # If no embeddings found for specific model_name, fallback to any embedding with matching dimension
+        if not embs and expected_dim is not None:
+            embs = get_all_embeddings(model_name=None, expected_dim=expected_dim)
+        _KNOWN_FACE_EMBEDDINGS[cache_key] = embs
+    return _KNOWN_FACE_EMBEDDINGS[cache_key]
 
-def recognize_face(embedding, threshold=None):
+def recognize_face(embedding, threshold=None, model_type=None):
     """
     Compares the input face embedding against all registered student embeddings.
     Returns:
@@ -34,7 +39,8 @@ def recognize_face(embedding, threshold=None):
     if threshold is None:
         threshold = RECOGNITION_THRESHOLD
         
-    known_embeddings = load_known_face_embeddings()
+    expected_dim = len(embedding)
+    known_embeddings = load_known_face_embeddings(model_type=model_type, expected_dim=expected_dim)
     if not known_embeddings:
         return "Unknown", 0.0, False
         
