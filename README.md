@@ -507,23 +507,8 @@ Then embed them in this README using:
 
 ## 🧑‍💻 Author
 
-**Prerit Mehta**
+**Prerit**
 
 GitHub: https://github.com/prerit-18
 
 ------------------------------------------------------------------------
-
-## 📄 License
-
-This project is an academic/educational project. Add a formal
-open-source license such as MIT before presenting the repository as an
-open-source project.
-
-------------------------------------------------------------------------
-
-## ⚠️ Disclaimer
-
-This system is developed for **educational, research, and demonstration
-purposes**. Face recognition and biometric attendance involve sensitive
-personal data. Any real-world deployment should implement appropriate
-consent, security, privacy, data-retention, and regulatory safeguards.
