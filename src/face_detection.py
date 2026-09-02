@@ -1,15 +1,24 @@
 import cv2
+
 import numpy as np
 
-# Load the Haar Cascade Face Detector from OpenCV's built-in data directory
-try:
-    face_cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    face_cascade = cv2.CascadeClassifier(face_cascade_path)
-    if face_cascade.empty():
-        raise IOError("Failed to load frontal face cascade classifier.")
-except Exception as e:
-    # Fallback to local or default if cv2.data.haarcascades is not configured correctly
-    face_cascade = cv2.CascadeClassifier()
+face_cascade_path = (
+
+    cv2.data.haarcascades +
+
+    "haarcascade_frontalface_default.xml"
+
+)
+
+face_cascade = cv2.CascadeClassifier(face_cascade_path)
+
+if face_cascade.empty():
+
+    raise RuntimeError(
+
+        f"Failed to load Haar Cascade: {face_cascade_path}"
+
+    )
 
 def detect_faces(image, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)):
     """
